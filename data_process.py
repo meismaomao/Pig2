@@ -5,7 +5,7 @@ import cv2
 train_root = "/home/lenovo/yql/pig_data/train_folder_det_resize"
 valid_root = '/home/lenovo/yql/pig_data/validation_folder_det_resize'
 test_root = '/home/lenovo/yql/pig_data/pig_test_resize'
-train_no_det_root = '/home/lenovo/yql/pig_data/train_folder_resize'
+train_no_det_root = '/home/lenovo/yql/pig_data/train_folder_det_random_crop'
 
 def one_hot(labels):
     labels = np.array(labels)
@@ -100,6 +100,64 @@ def input_train_no_det():
         train_data.append(im)
         train_label.append(label)
     return train_data, train_label
+
+def input_path_dir():
+    train_path = []
+    train_label = []
+    train_no_det_path = []
+    for dir in os.listdir(train_root):
+        train_path.append(os.path.join(train_root, dir))
+        train_label.append(int(dir[5:7]) - 1)
+        train_no_det_path.append(os.path.join(train_no_det_root, dir))
+
+    train_label = one_hot(train_label)
+    np.random.seed(0)
+    np.random.shuffle(train_path)
+    np.random.seed(0)
+    np.random.shuffle(train_label)
+    np.random.seed(0)
+    np.random.shuffle(train_no_det_path)
+    return np.array(train_path), np.array(train_label), np.array(train_no_det_path)
+
+def read_input_train_data(dir_list):
+    train_data = []
+    for file_path in dir_list:
+        im = cv2.imread(file_path)
+        # im = np.expand_dims(im, axis=0)
+        train_data.append(im)
+    return np.array(train_data)
+
+def read_input_train_no_det_data(dir_list):
+    train_data = []
+    for file_path in dir_list:
+        im = cv2.imread(file_path)
+        # im = np.expand_dims(im, axis=0)
+        train_data.append(im)
+    return np.array(train_data)
+
+def read_train_det_or_no_det():
+    train_det_data = []
+    train_no_det_data = []
+    train_label = []
+    for dir in os.listdir(train_root):
+        train_det_path = os.path.join(train_root, dir)
+        train_no_det_path = os.path.join(train_no_det_root, dir)
+        train_label.append(int(dir[5:7]) - 1)
+        im = cv2.imread(train_det_path)
+        # im = np.expand_dims(im, axis=0)
+        train_det_data.append(im)
+        im1 = cv2.imread(train_no_det_path)
+        # im = np.expand_dims(im, axis=0)
+        train_no_det_data.append(im1)
+    train_label = one_hot(train_label)
+    np.random.seed(0)
+    np.random.shuffle(train_det_data)
+    np.random.seed(0)
+    np.random.shuffle(train_label)
+    np.random.seed(0)
+    np.random.shuffle(train_no_det_data)
+    return np.array(train_det_data), np.array(train_label), np.array(train_no_det_data)
+
 
 if __name__ == '__main__':
     valid_data, valid_label = input_valid_data()

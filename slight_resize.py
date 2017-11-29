@@ -8,6 +8,7 @@ Then, on this basis, we proceed with resize
 import os
 import cv2
 import numpy as np
+import tensorflow as tf
 
 SIZE = 500
 scale = 40
@@ -42,19 +43,20 @@ for file_name in os.listdir(TRAIN_DIR):
 			im = cv2.resize(im, (SIZE, im_height))
 			break
 
-	top = (SIZE - im.shape[1]) // 2 if (SIZE - im.shape[1]) % 2 == 0 else (SIZE - im.shape[1]) // 2 + 1
-	bottom = (SIZE - im.shape[1]) // 2
-	left = (SIZE - im.shape[0]) // 2 if (SIZE - im.shape[0]) % 2 == 0 else (SIZE - im.shape[0]) // 2 + 1
-	right = (SIZE - im.shape[0]) // 2
-	im = cv2.copyMakeBorder(im, left, right, top, bottom, cv2.BORDER_CONSTANT, value=[0, 0, 0])
+	# top = (SIZE - im.shape[1]) // 2 if (SIZE - im.shape[1]) % 2 == 0 else (SIZE - im.shape[1]) // 2 + 1
+	# bottom = (SIZE - im.shape[1]) // 2
+	# left = (SIZE - im.shape[0]) // 2 if (SIZE - im.shape[0]) % 2 == 0 else (SIZE - im.shape[0]) // 2 + 1
+	# right = (SIZE - im.shape[0]) // 2
+	# im = cv2.copyMakeBorder(im, left, right, top, bottom, cv2.BORDER_CONSTANT, value=[0, 0, 0])
 	# cv2.imshow('img', im)
 	# cv2.waitKey(25)
 	##on this basis, we can resize the image and not change the ratio of width
 	## and height. the pad does not influence the image classification
-	im = cv2.resize(im, (224, 224))
+	# im = cv2.resize(im, (224, 224))
 	# class_name = file_name[5:7]
 	# class_dir = os.path.join(SAVE_DIR, file_name)
 	# if not os.path.exists(class_dir):
 	# 	os.mkdir(class_dir)
+
 	save_path = os.path.join(SAVE_DIR, file_name)
 	cv2.imwrite(save_path, im)
