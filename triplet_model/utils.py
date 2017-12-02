@@ -149,7 +149,7 @@ def compute_euclidean_distance(x, y):
     Computes the euclidean distance between two tensorflow variables
     """
 
-    d = tf.square(tf.substract(x - y))
+    d = tf.square(tf.subtract(x, y))
     d = tf.reduce_sum(d, axis=1)
     return d
 
@@ -171,7 +171,7 @@ def compute_triplet_loss(anchor_feature, positive_feature, negative_feature, mar
         d_p_squared = tf.square(compute_euclidean_distance(anchor_feature, positive_feature))
         d_n_squared = tf.square(compute_euclidean_distance(anchor_feature, negative_feature))
 
-        basic_loss = tf.add(tf.substract(d_p_squared, d_n_squared), margin)
+        basic_loss = tf.add(tf.subtract(d_p_squared, d_n_squared), margin)
         loss = tf.maximum(0., basic_loss)
 
         return tf.reduce_mean(loss), tf.reduce_mean(d_p_squared), tf.reduce_mean(d_n_squared)

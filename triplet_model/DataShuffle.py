@@ -7,17 +7,8 @@ class DataShuffle(object):
         total_samples = data.shape[0]
         indexes = np.array(range(total_samples))
         np.random.shuffle(indexes)
-        self.train_data = data[indexes, :, :, :]
-        self.train_labels = labels[indexes]
-
-    def get_batch(self, n_sample):
-        data = self.train_data
-        label = self.train_labels
-        indexes = np.array(range(data.shape[0]))
-        np.random.shuffle(indexes)
-        selected_samples = data[indexes[:n_sample], :, :, :]
-        selected_labels = label[indexes[:n_sample]]
-        return selected_samples, selected_labels
+        self.train_data = data
+        self.train_labels = labels
 
     def get_triplet(self, n_labels, n_triplet=1):
         def _get_one_triplet(input_data, input_labels):

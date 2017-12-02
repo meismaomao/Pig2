@@ -2,7 +2,7 @@ import numpy as np
 import os
 import cv2
 
-train_root = "/home/lenovo/yql/pig_data/train_folder_det_resize"
+train_root = "/home/lenovo/yql/pig_data/train_folder_det_random_crop"
 valid_root = '/home/lenovo/yql/pig_data/validation_folder_det_resize'
 test_root = '/home/lenovo/yql/pig_data/pig_test_resize'
 train_no_det_root = '/home/lenovo/yql/pig_data/train_folder_det_random_crop'
@@ -71,18 +71,13 @@ def input_test_data():
 def input_data():
     train_data, train_label, _, _, _ = read_data()
     # train_label = one_hot(train_label)
-    train_no_det_data, train_no_det_label = input_train_no_det()
+    # train_no_det_data, train_no_det_label = input_train_no_det()
     # train_no_det_label = one_hot(train_no_det_label)
 
     np.random.seed(0)
     np.random.shuffle(train_data)
     np.random.seed(0)
     np.random.shuffle(train_label)
-    np.random.seed(0)
-    np.random.shuffle(train_no_det_data)
-    np.random.seed(0)
-    np.random.shuffle(train_no_det_label)
-
     return np.array(train_data), np.array(train_label) #, np.array(train_no_det_data), np.array(train_no_det_label)
 
 def input_valid_data():

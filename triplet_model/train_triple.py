@@ -7,21 +7,31 @@ from DataShuffle import DataShuffle
 
 def main(argv=None):
 
-    margin = 0.01
-    BATCH_SIZE = 32
-    ITERATION = 20000
+    margin = 0.25
+    BATCH_SIZE = 40
+    ITERATION = 2000000
     data_num = 16813
     train_anchor_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 224, 224, 3], name='anchor')
-    train_positive_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 224, 224, 3], name='positive')
-    train_negative_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 224, 224, 3], name="negative")
+    train_positive_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 224, 224, 3], name='anchor')
+    train_negative_data = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 224, 224, 3], name='anchor')
     labels_anchor = tf.placeholder(tf.float32, shape=[BATCH_SIZE])
     labels_positive = tf.placeholder(tf.float32, shape=[BATCH_SIZE])
     labels_negative = tf.placeholder(tf.float32, shape=[BATCH_SIZE])
     keep_prob = tf.placeholder(tf.float32, shape=[], name='keep_probability')
+    train_data = tf.concat([train_anchor_data, train_positive_data, train_negative_data], axis=0)
 
-    vgg_train_anchor = model.NetworkModel(train_anchor_data, keep_prob=keep_prob)
-    vgg_train_positive = model.NetworkModel(train_positive_data, keep_prob=keep_prob, reuse=True)
-    vgg_train_negative = model.NetworkModel(train_negative_data, keep_prob=keep_prob, reuse=True)
+    # vgg_train_anchor = model.NetworkModel(train_anchor_data, keep_prob=keep_prob)
+    # vgg_train_positive = model.NetworkModel(train_positive_data, keep_prob=keep_prob, reuse=True)
+    # vgg_train_negative = model.NetworkModel(train_negative_data, keep_prob=keep_prob, reuse=True)
+
+    pre_logits = model.NetworkModel(train_data, keep_prob=keep_prob)
+    logits = tf.nn.l2_normalize(pre_logits, 1, 1e-12, name='embeddings')
+    # print(logits.get_shape().as_list())
+
+    vgg_train_anchor, vgg_train_positive, vgg_train_negative = tf.unstack(tf.reshape(logits, [-1, 3, 128]), 3, 1)
+    # print(vgg_train_anchor.get_shape().as_list())
+    # print(vgg_train_positive.get_shape().as_list())
+    # print(vgg_train_negative.get_shape().as_list())
 
     loss, positives, negatives = utils.compute_triplet_loss(vgg_train_anchor,
                                                            vgg_train_positive, vgg_train_negative, margin)
@@ -34,12 +44,11 @@ def main(argv=None):
         0.95
     )
 
-    optimizer_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=batch)
+    optimizer_op = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss)
     Saver = tf.train.Saver()
     tf.summary.scalar('loss', loss)
     tf.summary.scalar('positives', positives)
     tf.summary.scalar('negatives', negatives)
-    tf.summary.scalar('lr', learning_rate)
     merged = tf.summary.merge_all()
 
     data, labels = data_process.input_data()
@@ -54,10 +63,9 @@ def main(argv=None):
         sess.run(tf.global_variables_initializer())
 
         for step in range(ITERATION):
-            batch_anchor, batch_positive, batch_negative,\
-            batch_labels_anchor, batch_labels_positive,\
+            batch_anchor, batch_positive, batch_negative, batch_labels_anchor, batch_labels_positive,\
             batch_labels_negative = dataShufflu.get_triplet(n_labels=30, n_triplet=BATCH_SIZE)
-
+            # print(batch_anchor, batch_positive, batch_negative, batch_labels_anchor, batch_labels_positive, batch_labels_negative)
             feed_dict = {
                 train_anchor_data: batch_anchor,
                 train_positive_data: batch_positive,
@@ -65,9 +73,10 @@ def main(argv=None):
                 labels_anchor: batch_labels_anchor,
                 labels_positive: batch_labels_positive,
                 labels_negative: batch_labels_negative,
-                keep_prob: 0.8
+                keep_prob: 0.85
             }
-            _, l, lr, summary = sess.run([optimizer_op, loss, learning_rate, merged],
+
+            _, l, ls, summary = sess.run([optimizer_op, loss, learning_rate, merged],
                                          feed_dict=feed_dict)
 
             print("%d the %s train reslut" % (step, datetime.datetime.now()))

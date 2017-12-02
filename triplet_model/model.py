@@ -6,12 +6,7 @@ import data_process
 
 
 MODEL_URL = 'http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydeep-19.mat'
-CLASS_COUNTS = 500
-BATCH_SIZE = 128
-MAX_ITRATION = int(1e6 +1)
-IMAGE_SIZE = 224
-IMAGE_CHANNEL = 3
-TRAIN_NUM = 6000
+CLASS_COUNTS = 1024
 
 def NetworkModel(image, keep_prob, reuse=False):
 	with tf.variable_scope('NetworkModel', reuse=reuse):
