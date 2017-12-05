@@ -1,7 +1,6 @@
 import tensorflow as tf
 import numpy as np
 import model
-import inception_resnet_v2_slim_version
 import data_process
 import pickle
 from sklearn.svm import SVC
@@ -18,8 +17,7 @@ def main(data, iter_num, labels, train=True):
     labels_anchor = tf.placeholder(tf.float32, shape=[BATCH_SIZE])
     keep_prob = tf.placeholder(tf.float32, shape=[], name='keep_probability')
 
-    pre_logits = inception_resnet_v2_slim_version.inception_resnet_v2(train_anchor_data, num_classes=128,
-                                                                      is_training=True, )
+    pre_logits = model.NetworkModel(train_anchor_data, keep_prob=keep_prob)
     logits = tf.nn.l2_normalize(pre_logits, 1, 1e-12, name='embeddings')
     # print(logits.get_shape().as_list())
     data_train, train_labels = data, labels

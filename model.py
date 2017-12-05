@@ -1,87 +1,71 @@
 import tensorflow as tf
-from resnet import softmax_layer, conv_layer, residual_block, relu_layer
-
-def resnet(inpt, num_conv, batch_size, keep_prob):
-    layers = []
-
-    with tf.name_scope('conv1'):
-        conv1 = conv_layer(inpt, [3, 3, 3, 64], 1)
-        layers.append(conv1)
-
-    for i in range(num_conv):
-        with tf.name_scope('conv2_%d' % (i + 1)):
-            conv2_x = residual_block(layers[-1], 64, False)
-            conv2 = residual_block(conv2_x, 64, False)
-            layers.append(conv2_x)
-            layers.append(conv2)
-
-            assert conv2.get_shape().as_list()[1:] == [224, 224, 64]
-
-    for i in range(num_conv):
-        down_sample = True if i == 0 else False
-        with tf.name_scope('conv3_%d' % (i + 1)):
-            conv3_x = residual_block(layers[-1], 128, down_sample)
-            conv3 = residual_block(conv3_x, 128, False)
-            layers.append(conv3_x)
-            layers.append(conv3)
-
-            assert conv3.get_shape().as_list()[1:] == [112, 112, 128]
-
-    for i in range(num_conv):
-        down_sample = True if i == 0 else False
-        with tf.name_scope('conv4_%d' % (i + 1)):
-            conv4_x = residual_block(layers[-1], 256, down_sample)
-            conv4 = residual_block(conv4_x, 256, False)
-            layers.append(conv4_x)
-            layers.append(conv4)
-
-            assert conv4.get_shape().as_list()[1:] == [56, 56, 256]
-
-    for i in range(num_conv):
-        down_sample = True if i == 0 else False
-        with tf.name_scope('conv4_%d' % (i + 1)):
-            conv4_x = residual_block(layers[-1], 512, down_sample)
-            conv4 = residual_block(conv4_x, 512, False)
-            layers.append(conv4_x)
-            layers.append(conv4)
-
-            assert conv4.get_shape().as_list()[1:] == [28, 28, 512]
-
-    for i in range(num_conv):
-        down_sample = True if i == 0 else False
-        with tf.name_scope('conv4_%d' % (i + 1)):
-            conv4_x = residual_block(layers[-1], 512, down_sample)
-            conv4 = residual_block(conv4_x, 512, False)
-            layers.append(conv4_x)
-            layers.append(conv4)
-
-            assert conv4.get_shape().as_list()[1:] == [14, 14, 512]
-
-    for i in range(num_conv):
-        down_sample = True if i == 0 else False
-        with tf.name_scope('conv4_%d' % (i + 1)):
-            conv4_x = residual_block(layers[-1], 512, down_sample)
-            conv4 = residual_block(conv4_x, 512, False)
-            layers.append(conv4_x)
-            layers.append(conv4)
-
-            assert conv4.get_shape().as_list()[1:] == [7, 7, 512]
+import numpy as np
+import datetime
+import utils
+import data_process
 
 
-    with tf.name_scope('fc'):
-        # global_pool = tf.reduce_mean(layers[-1], [1, 2])
-        global_conv = conv_layer(inpt, [7, 7, 512, 4096], 1)
-        print(global_conv.get_shape().as_list())
-        global_conv_flatten = tf.reshape(global_conv, [batch_size, -1])
+MODEL_URL = 'http://www.vlfeat.org/matconvnet/models/beta16/imagenet-vgg-verydeep-19.mat'
+CLASS_COUNTS = 1024
 
-        fc1 = relu_layer(global_conv_flatten, (4096, 4096))
+def NetworkModel(image, keep_prob, reuse=False):
+	with tf.variable_scope('NetworkModel', reuse=reuse):
+		def _vgg_net(weights, image):
+			layers = (
+				'conv1_1', 'relu1_1', 'conv1_2', 'relu1_2', 'pool1',
+                'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2',
+                'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3',
+                'relu3_3', 'conv3_4', 'relu3_4', 'pool3',
+                'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3',
+                'relu4_3', 'conv4_4', 'relu4_4', 'pool4',
+                'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3',
+                'relu5_3', 'conv5_4', 'relu5_4'
+			)
+			net = {}
+			current = image
+			for i, name in enumerate(layers):
+				kind = name[:4]
+				if kind == 'conv':
+					kernels, bias = weights[i][0][0][0][0]
+					kernels = utils.get_variable(
+						np.transpose(kernels, (0, 1, 2, 3)), name=name + '_w')
+					bias = utils.get_variable(bias.reshape(-1), name=name + '_b')
+					current = utils.conv2d_basic(current, kernels, bias)
+				elif kind == 'relu':
+					current = tf.nn.relu(current, name=name)
+				elif kind == 'pool':
+					current = utils.avg_pool_2x2(current)
+				net[name] = current
+			return net
+		print('setting up vgg model initialized params --> extractor')
+		model_data = utils.get_model_data("data", MODEL_URL)
+		weights = np.squeeze(model_data['layers'])
 
-        fc1 = tf.nn.dropout(fc1, keep_prob)
+		with tf.name_scope('inference'):
+			image_net = _vgg_net(weights, image)
+			conv_final_layer = image_net['relu5_4']
 
-        fc2 = relu_layer(fc1, (4096, 4096))
+			pool5 = utils.max_pool_2x2(conv_final_layer)
 
-        out = softmax_layer(fc2, [4096, 30])
-        layers.append(out)
+			pool5_flatten = tf.reshape(pool5, [-1, 7 * 7 * 512])
+			W1 = utils.get_weights_variable(7 * 7 * 512, 4096, name='W1')
+			b1 = utils.get_bias_variable(4096, name='b1')
+			matmul1 = tf.nn.bias_add(tf.matmul(pool5_flatten, W1), b1)
+			matmul1 = tf.nn.relu(matmul1)
 
-    return layers[-1]
+			matmul1 = tf.nn.dropout(matmul1, keep_prob)
+
+			W2 = utils.get_weights_variable(4096, 4096, name='W2')
+			b2 = utils.get_bias_variable(4096, name='b2')
+			matmul2 = tf.nn.bias_add(tf.matmul(matmul1, W2), b2)
+			matmul2 = tf.nn.relu(matmul2)
+
+			matmul2 = tf.nn.dropout(matmul2, keep_prob)
+
+			W3 = utils.get_weights_variable(4096, CLASS_COUNTS, name='W3')
+			b3 = utils.get_bias_variable(CLASS_COUNTS, name='b3')
+			pre_logits = tf.nn.bias_add(tf.matmul(matmul2, W3), b3)
+			# logits = tf.nn.softmax(pre_logits)
+
+			return pre_logits    #, logits
 

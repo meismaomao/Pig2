@@ -138,3 +138,62 @@ def save_image(image, save_dir, name, mean=None):
 
 def unprocess_image(image, mean):
     return image+mean
+
+def to_categorial(labels):
+    one_hot = np.zeros(labels.shape[0], labels.max() + 1)
+    one_hot[np.array(labels.shape[0], labels)] = 1
+    return one_hot
+
+def compute_euclidean_distance(x, y):
+    """
+    Computes the euclidean distance between two tensorflow variables
+    """
+
+    d = tf.square(tf.subtract(x, y))
+    d = tf.reduce_sum(d, axis=1)
+    return d
+
+def compute_triplet_loss(anchor_feature, positive_feature, negative_feature, margin):
+
+    """
+    Compute the contrastive loss as in
+    L = || f_a - f_p ||^2 - || f_a - f_n ||^2 + m
+    **Parameters**
+     anchor_feature:
+     positive_feature:
+     negative_feature:
+     margin: Triplet margin
+    **Returns**
+     Return the loss operation
+    """
+
+    with tf.name_scope("triplet_loss"):
+        d_p_squared = tf.square(compute_euclidean_distance(anchor_feature, positive_feature))
+        d_n_squared = tf.square(compute_euclidean_distance(anchor_feature, negative_feature))
+
+        basic_loss = tf.add(tf.subtract(d_p_squared, d_n_squared), margin)
+        loss = tf.maximum(0., basic_loss)
+
+        return tf.reduce_mean(loss), tf.reduce_mean(d_p_squared), tf.reduce_mean(d_n_squared)
+
+
+def compute_accuracy(data_train, labels_train, data_validation, labels_validation, n_classes):
+
+    models = []
+    for i in range(n_classes):
+        indexes = labels_train == i
+        models.append(np.mean(data_train[indexes, :], axis=0))
+
+    tp = 0
+    for i in range(data_validation.shape[0]):
+        d = data_validation[i, :]
+        l = labels_validation[i]
+
+        scores = [consine(m, d) for m in models]
+        predict = np. argmax(scores)
+        if predict == 1:
+            tp += 1
+    return (float(tp) / data_validation.shape[0]) * 100
+
+def get_index(labels, val):
+    return [i for i in range(len(labels)) if labels[i] == val]

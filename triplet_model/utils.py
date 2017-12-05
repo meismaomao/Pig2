@@ -7,6 +7,7 @@ import zipfile
 import scipy.io
 import urllib.request
 import cv2
+import random
 
 def maybe_download_and_extract(dir_path, model_url, is_zipfile=False, is_tarfile=False):
     """
@@ -197,3 +198,38 @@ def compute_accuracy(data_train, labels_train, data_validation, labels_validatio
 
 def get_index(labels, val):
     return [i for i in range(len(labels)) if labels[i] == val]
+
+def prewhiten(x):
+    mean = np.mean(x)
+    std = np.std(x)
+    std_adj = np.maximum(std, 1.0/np.sqrt(x.size))
+    y = np.multiply(np.subtract(x, mean), 1/std_adj)
+    return y
+
+def crop(image, random_crop, image_size):
+    if image.shape[1]>image_size:
+        sz1 = int(image.shape[1]//2)
+        sz2 = int(image_size//2)
+        if random_crop:
+            diff = sz1-sz2
+            (h, v) = (np.random.randint(-diff, diff+1), np.random.randint(-diff, diff+1))
+        else:
+            (h, v) = (0, 0)
+        image = image[(sz1-sz2+v):(sz1+sz2+v + 1), (sz1-sz2+h):(sz1+sz2+h + 1), :]
+    return image
+
+def flip(image, random_flip):
+    if random_flip and np.random.choice([True, False]):
+        image = np.fliplr(image)
+    return image
+
+def random_rotate_image(image):
+    angle = np.random.uniform(low=-10.0, high=10.0)
+    return misc.imrotate(image, angle, 'bicubic')
+
+def random_crop(img, image_size):
+    width = height = image_size
+    x = random.randint(0, img.shape[1] - width)
+    y = random.randint(0, img.shape[0] - height)
+
+    return img[y:y+height, x:x+width]
