@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import tensorflow as tf
 import numpy as np
 import os, sys
@@ -5,9 +6,11 @@ import scipy.misc as misc
 import tarfile
 import zipfile
 import scipy.io
-import urllib.request
+import urllib
 import cv2
 import random
+# import matplotlib.pyplot as plt
+# import matplotlib.cm as cm
 
 def maybe_download_and_extract(dir_path, model_url, is_zipfile=False, is_tarfile=False):
     """
@@ -25,7 +28,7 @@ def maybe_download_and_extract(dir_path, model_url, is_zipfile=False, is_tarfile
             sys.stdout.write(
                 '\r>> Download %s %.1f%%' %(filename, float(count * block_size) / float(total_size) * 100.0))
             sys.stdout.flush()
-        file_path, _ = urllib.request.urlretrieve(model_url, filepath, reporthook=_progress)
+        file_path, _ = urllib.urlretrieve(model_url, filepath, reporthook=_progress)
         print('\n')
         statinfo = os.stat(filepath)
         print('Succesfully downloaded', filename, statinfo.st_size, 'bytes.')
@@ -145,14 +148,20 @@ def to_categorial(labels):
     one_hot[np.array(labels.shape[0], labels)] = 1
     return one_hot
 
-def compute_euclidean_distance(x, y):
+def compute_euclidean_distance(x, y, positive=True):
     """
     Computes the euclidean distance between two tensorflow variables
     """
 
     d = tf.square(tf.subtract(x, y))
     d = tf.reduce_sum(d, axis=1)
-    return d
+    if positive:
+        d1, indx = tf.nn.top_k(input=d, k=100)
+    else:
+        d1, indx = tf.nn.top_k(input=-d, k=100)
+        d1 = -1.0 * d1
+
+    return d1 * 2.0
 
 def compute_triplet_loss(anchor_feature, positive_feature, negative_feature, margin):
 
@@ -168,14 +177,14 @@ def compute_triplet_loss(anchor_feature, positive_feature, negative_feature, mar
      Return the loss operation
     """
 
-    with tf.name_scope("triplet_loss"):
-        d_p_squared = tf.square(compute_euclidean_distance(anchor_feature, positive_feature))
-        d_n_squared = tf.square(compute_euclidean_distance(anchor_feature, negative_feature))
+    with tf.variable_scope('triplet_loss'):
+        pos_dist = compute_euclidean_distance(anchor_feature, positive_feature, positive=True)
+        neg_dist = compute_euclidean_distance(anchor_feature, negative_feature, positive=False)
 
-        basic_loss = tf.add(tf.subtract(d_p_squared, d_n_squared), margin)
-        loss = tf.maximum(0., basic_loss)
+        basic_loss = tf.add(tf.subtract(pos_dist, neg_dist), margin)
+        loss = tf.reduce_mean(tf.maximum(basic_loss, 0.0), 0)
 
-        return tf.reduce_mean(loss), tf.reduce_mean(d_p_squared), tf.reduce_mean(d_n_squared)
+    return loss, tf.reduce_mean(pos_dist), tf.reduce_mean(neg_dist)
 
 
 def compute_accuracy(data_train, labels_train, data_validation, labels_validation, n_classes):
@@ -206,6 +215,12 @@ def prewhiten(x):
     y = np.multiply(np.subtract(x, mean), 1/std_adj)
     return y
 
+def whiten(x):
+    mean = np.mean(x)
+    std = np.std(x)
+    y = np.multiply(np.subtract(x, mean), 1.0 / std)
+    return y
+
 def crop(image, random_crop, image_size):
     if image.shape[1]>image_size:
         sz1 = int(image.shape[1]//2)
@@ -233,3 +248,60 @@ def random_crop(img, image_size):
     y = random.randint(0, img.shape[0] - height)
 
     return img[y:y+height, x:x+width]
+
+
+def get_center_loss(features, labels, alpha, num_classes):
+    """获取center loss及center的更新op
+
+    Arguments:
+        features: Tensor,表征样本特征,一般使用某个fc层的输出,shape应该为[batch_size, feature_length].
+        labels: Tensor,表征样本label,非one-hot编码,shape应为[batch_size].
+        alpha: 0-1之间的数字,控制样本类别中心的学习率,细节参考原文.
+        num_classes: 整数,表明总共有多少个类别,网络分类输出有多少个神经元这里就取多少.
+
+    Return：
+        loss: Tensor,可与softmax loss相加作为总的loss进行优化.
+        centers: Tensor,存储样本中心值的Tensor，仅查看样本中心存储的具体数值时有用.
+        centers_update_op: op,用于更新样本中心的op，在训练时需要同时运行该op，否则样本中心不会更新
+    """
+    # 获取特征的维数，例如256维
+    len_features = features.get_shape()[1]
+    # 建立一个Variable,shape为[num_classes, len_features]，用于存储整个网络的样本中心，
+    # 设置trainable=False是因为样本中心不是由梯度进行更新的
+    centers = tf.get_variable('centers', [num_classes, len_features], dtype=tf.float32,
+                              initializer=tf.constant_initializer(0), trainable=False)
+    # 将label展开为一维的，输入如果已经是一维的，则该动作其实无必要
+    labels = tf.reshape(labels, [-1])
+
+    # 根据样本label,获取mini-batch中每一个样本对应的中心值
+    centers_batch = tf.gather(centers, labels)
+    # 计算loss
+    loss = tf.reduce_mean(tf.square(features - centers_batch))
+
+    # 当前mini-batch的特征值与它们对应的中心值之间的差
+    diff = centers_batch - features
+
+    # 获取mini-batch中同一类别样本出现的次数,了解原理请参考原文公式(4)
+    unique_label, unique_idx, unique_count = tf.unique_with_counts(labels)
+    appear_times = tf.gather(unique_count, unique_idx)
+    appear_times = tf.reshape(appear_times, [-1, 1])
+
+    diff = diff / tf.cast((1 + appear_times), tf.float32)
+    diff = alpha * diff
+
+    centers_update_op = tf.scatter_sub(centers, labels, diff)
+
+    return loss, centers, centers_update_op
+
+# def plot_embedding(X, y, title=None):
+#     x_min, x_max = bp.min(X, 0), np.max(X, 0)
+#     X = (X - x_min) / (x_max - x_min)
+#
+#     plt.figure(figsize=(10, 10))
+#     ax = plt.subplot(111)
+#     for i in range(X.shape[0]):
+#         plt.text(X[i, 0], X[i, 1], str(y[i]), color=cm.Set1(y[i] / 10.0), fontdict={'weight': 'bold', 'size': 9})
+#
+#     plt.xticks([]), plt.yticks([])
+#     if title is not None:
+#         plt.title(title)
